@@ -23,6 +23,15 @@ import { lsTool } from "../../../tools/definitions/ls";
 import { readFileTool } from "../../../tools/definitions/readFile";
 import { viewRepoMapTool } from "../../../tools/definitions/viewRepoMap";
 import { viewSubdirectoryTool } from "../../../tools/definitions/viewSubdirectory";
+import { DependencyGraphBuilder } from "../DependencyGraphBuilder";
+import {
+  MultiSourceRetrievalManager,
+  MultiSourceRetrievalManagerOptions,
+} from "../MultiSourceRetrievalManager";
+import {
+  EnhancedRetrievalSources,
+  IEnhancedRetrievalPipeline,
+} from "../types/EnhancedRetrievalTypes";
 
 const DEFAULT_CHUNK_SIZE = 384;
 
@@ -44,6 +53,8 @@ export interface RetrievalPipelineOptions {
   nFinal: number;
   tags: BranchAndDir[];
   filterDirectory?: string;
+  // Phase 1.4: Optional enhanced retrieval configuration
+  multiSourceOptions?: Partial<MultiSourceRetrievalManagerOptions>;
 }
 
 export interface RetrievalPipelineRunArguments {
@@ -57,13 +68,30 @@ export interface IRetrievalPipeline {
   run(args: RetrievalPipelineRunArguments): Promise<Chunk[]>;
 }
 
-export default class BaseRetrievalPipeline implements IRetrievalPipeline {
+export default class BaseRetrievalPipeline
+  implements IRetrievalPipeline, IEnhancedRetrievalPipeline
+{
   private ftsIndex = new FullTextSearchCodebaseIndex();
   private lanceDbIndex: LanceDbIndex | null = null;
   private lanceDbInitPromise: Promise<void> | null = null;
 
+  // Phase 1.4: Enhanced retrieval infrastructure (optional)
+  protected multiSourceManager?: MultiSourceRetrievalManager;
+  protected dependencyGraphBuilder?: DependencyGraphBuilder;
+
   constructor(protected readonly options: RetrievalPipelineOptions) {
     void this.initLanceDb();
+
+    // Phase 1.4: Initialize enhanced retrieval components if configured
+    if (options.multiSourceOptions) {
+      this.multiSourceManager = new MultiSourceRetrievalManager(
+        options.llm,
+        options.config,
+        options.ide,
+        options.multiSourceOptions,
+      );
+      this.dependencyGraphBuilder = new DependencyGraphBuilder(options.ide);
+    }
   }
 
   protected async initLanceDb() {
@@ -200,6 +228,95 @@ export default class BaseRetrievalPipeline implements IRetrievalPipeline {
 
   run(args: RetrievalPipelineRunArguments): Promise<Chunk[]> {
     throw new Error("Not implemented");
+  }
+
+  // ===== Phase 1.4: Enhanced Multi-Source Retrieval =====
+
+  /**
+   * Retrieve from multiple sources using MultiSourceRetrievalManager
+   * This is the new enhanced retrieval method that coordinates all sources
+   *
+   * @param args - Retrieval arguments
+   * @returns EnhancedRetrievalSources with results from all enabled sources
+   */
+  async retrieveFromMultipleSources(
+    args: RetrievalPipelineRunArguments,
+  ): Promise<EnhancedRetrievalSources> {
+    if (!this.multiSourceManager) {
+      // Fallback: If multi-source manager not initialized, return empty sources
+      console.warn(
+        "MultiSourceRetrievalManager not initialized. Enable by passing multiSourceOptions to constructor.",
+      );
+      return {
+        fts: [],
+        embeddings: [],
+        lsp: [],
+        treeSitter: [],
+        git: [],
+        docs: [],
+        codebase: [],
+        file: [],
+        folder: [],
+        metadata: {
+          totalSources: 0,
+          totalChunks: 0,
+          timeMs: 0,
+          sources: [],
+        },
+      };
+    }
+
+    // Use MultiSourceRetrievalManager to retrieve from all sources
+    return this.multiSourceManager.retrieveAll({
+      query: args.query,
+      nRetrieve: this.options.nRetrieve,
+      tags: args.tags,
+      filterDirectory: args.filterDirectory,
+      includeEmbeddings: args.includeEmbeddings,
+    });
+  }
+
+  /**
+   * Fuse results from multiple sources into a single ranked list
+   * This method can be overridden by subclasses for custom fusion strategies
+   *
+   * @param sources - Results from all retrieval sources
+   * @returns Fused and ranked chunks
+   */
+  async fuseResults(sources: EnhancedRetrievalSources): Promise<Chunk[]> {
+    // Default implementation: Simple concatenation
+    // Subclasses can override for more sophisticated fusion (e.g., reranking)
+    const allChunks: Chunk[] = [
+      ...sources.fts,
+      ...sources.embeddings,
+      ...sources.lsp,
+      ...sources.treeSitter,
+      ...sources.git,
+      ...sources.docs,
+      ...sources.codebase,
+      ...sources.file,
+      ...sources.folder,
+    ];
+
+    // Remove duplicates based on digest
+    const seen = new Set<string>();
+    const deduplicated = allChunks.filter((chunk) => {
+      if (seen.has(chunk.digest)) {
+        return false;
+      }
+      seen.add(chunk.digest);
+      return true;
+    });
+
+    return deduplicated.slice(0, this.options.nFinal);
+  }
+
+  /**
+   * Get dependency graph builder instance
+   * Useful for finding related files based on import relationships
+   */
+  getDependencyGraphBuilder(): DependencyGraphBuilder | undefined {
+    return this.dependencyGraphBuilder;
   }
 
   protected async retrieveWithTools(input: string): Promise<Chunk[]> {
