@@ -1,6 +1,6 @@
 /**
  * Integration Test for Phase 1.2
- * 
+ *
  * Verify MultiSourceRetrievalManager is compatible with BaseRetrievalPipeline
  * and can be integrated into the existing retrieval architecture.
  */
@@ -8,8 +8,14 @@
 import { Chunk, ContinueConfig, IDE, ILLM } from "../../index.d.js";
 import { FullTextSearchCodebaseIndex } from "../../indexing/FullTextSearchCodebaseIndex";
 import { LanceDbIndex } from "../../indexing/LanceDbIndex";
-import { MultiSourceRetrievalManager, RetrievalArguments } from "./MultiSourceRetrievalManager";
-import { RetrievalPipelineOptions, RetrievalPipelineRunArguments } from "./pipelines/BaseRetrievalPipeline";
+import {
+  MultiSourceRetrievalManager,
+  RetrievalArguments,
+} from "./MultiSourceRetrievalManager";
+import {
+  RetrievalPipelineOptions,
+  RetrievalPipelineRunArguments,
+} from "./pipelines/BaseRetrievalPipeline";
 
 /**
  * Test 1: Verify MultiSourceRetrievalManager can use same indexes as BaseRetrievalPipeline
@@ -260,14 +266,14 @@ function testHelperFunctionCompatibility() {
 // ===== Run All Tests =====
 
 console.log("\n🧪 Phase 1.2 Integration Test Suite\n");
-console.log("=" .repeat(60));
+console.log("=".repeat(60));
 
 console.log("\n📋 Testing Integration with BaseRetrievalPipeline\n");
 console.log("-".repeat(60));
 
 testIndexCompatibility();
 testArgumentCompatibility();
-testReturnTypeCompatibility();
+void testReturnTypeCompatibility();
 testMethodSignatures();
 testErrorHandlingCompatibility();
 testBackwardCompatibility();
@@ -278,7 +284,9 @@ console.log("\n" + "=".repeat(60));
 console.log("📊 Integration Test Summary");
 console.log("=".repeat(60));
 console.log("✅ All 8 integration tests passed!");
-console.log("\n🎉 MultiSourceRetrievalManager is fully compatible with BaseRetrievalPipeline!");
+console.log(
+  "\n🎉 MultiSourceRetrievalManager is fully compatible with BaseRetrievalPipeline!",
+);
 console.log("\n📋 Compatibility Verified:");
 console.log("   ✅ Index compatibility (FTS, LanceDB)");
 console.log("   ✅ Argument compatibility");
@@ -290,4 +298,3 @@ console.log("   ✅ Configuration");
 console.log("   ✅ Helper functions");
 console.log("\n🚀 Ready to integrate into Phase 1.4!");
 console.log("\n");
-
