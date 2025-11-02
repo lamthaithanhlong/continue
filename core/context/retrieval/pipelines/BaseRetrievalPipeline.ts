@@ -24,6 +24,7 @@ import { readFileTool } from "../../../tools/definitions/readFile";
 import { viewRepoMapTool } from "../../../tools/definitions/viewRepoMap";
 import { viewSubdirectoryTool } from "../../../tools/definitions/viewSubdirectory";
 import { DependencyGraphBuilder } from "../DependencyGraphBuilder";
+import { logDebug, logError, logInfo, LogSource } from "../LogCollector.js";
 import {
   MultiSourceRetrievalManager,
   MultiSourceRetrievalManagerOptions,
@@ -155,18 +156,51 @@ export default class BaseRetrievalPipeline
     args: RetrievalPipelineRunArguments,
     n: number,
   ): Promise<Chunk[]> {
-    if (args.query.trim() === "") {
-      return [];
+    const startTime = Date.now();
+
+    try {
+      logDebug(LogSource.RETRIEVAL, "FTS retrieval started", {
+        query: args.query,
+        n,
+        filterDirectory: args.filterDirectory,
+      });
+
+      if (args.query.trim() === "") {
+        logDebug(LogSource.RETRIEVAL, "FTS retrieval skipped: empty query");
+        return [];
+      }
+
+      const tokens = this.getCleanedTrigrams(args.query).join(" OR ");
+
+      const results = await this.ftsIndex.retrieve({
+        n,
+        text: tokens,
+        tags: args.tags,
+        directory: args.filterDirectory,
+      });
+
+      const duration = Date.now() - startTime;
+      logInfo(LogSource.RETRIEVAL, "FTS retrieval completed", {
+        query: args.query,
+        chunks: results.length,
+        durationMs: duration,
+      });
+
+      return results;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logError(
+        LogSource.RETRIEVAL,
+        "FTS retrieval failed",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          query: args.query,
+          n,
+          durationMs: duration,
+        },
+      );
+      throw error;
     }
-
-    const tokens = this.getCleanedTrigrams(args.query).join(" OR ");
-
-    return await this.ftsIndex.retrieve({
-      n,
-      text: tokens,
-      tags: args.tags,
-      directory: args.filterDirectory,
-    });
   }
 
   protected async retrieveAndChunkRecentlyEditedFiles(
@@ -212,21 +246,56 @@ export default class BaseRetrievalPipeline
     input: string,
     n: number,
   ): Promise<Chunk[]> {
-    const initialized = await this.ensureLanceDbInitialized();
+    const startTime = Date.now();
 
-    if (!initialized || !this.lanceDbIndex) {
-      console.warn(
-        "LanceDB index not available, skipping embeddings retrieval",
+    try {
+      logDebug(LogSource.RETRIEVAL, "Embeddings retrieval started", {
+        input: input.substring(0, 100),
+        n,
+      });
+
+      const initialized = await this.ensureLanceDbInitialized();
+
+      if (!initialized || !this.lanceDbIndex) {
+        logDebug(
+          LogSource.RETRIEVAL,
+          "Embeddings retrieval skipped: LanceDB not available",
+        );
+        console.warn(
+          "LanceDB index not available, skipping embeddings retrieval",
+        );
+        return [];
+      }
+
+      const results = await this.lanceDbIndex.retrieve(
+        input,
+        n,
+        this.options.tags,
+        this.options.filterDirectory,
       );
-      return [];
-    }
 
-    return this.lanceDbIndex.retrieve(
-      input,
-      n,
-      this.options.tags,
-      this.options.filterDirectory,
-    );
+      const duration = Date.now() - startTime;
+      logInfo(LogSource.RETRIEVAL, "Embeddings retrieval completed", {
+        input: input.substring(0, 100),
+        chunks: results.length,
+        durationMs: duration,
+      });
+
+      return results;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logError(
+        LogSource.RETRIEVAL,
+        "Embeddings retrieval failed",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          input: input.substring(0, 100),
+          n,
+          durationMs: duration,
+        },
+      );
+      throw error;
+    }
   }
 
   run(args: RetrievalPipelineRunArguments): Promise<Chunk[]> {
@@ -245,35 +314,83 @@ export default class BaseRetrievalPipeline
   async retrieveFromMultipleSources(
     args: RetrievalPipelineRunArguments,
   ): Promise<EnhancedRetrievalResult> {
-    if (!this.multiSourceManager) {
-      // Fallback: If multi-source manager not initialized, return empty result
-      console.warn(
-        "MultiSourceRetrievalManager not initialized. Enable by passing multiSourceOptions to constructor.",
-      );
-      return {
-        sources: {
-          fts: [],
-          embeddings: [],
-          recentlyEdited: [],
-          repoMap: [],
-          lspDefinitions: [],
-          importAnalysis: [],
-          recentlyVisitedRanges: [],
-          staticContext: [],
-          toolBasedSearch: [],
-        },
-        metadata: [],
-        totalTimeMs: 0,
-      };
-    }
+    const startTime = Date.now();
 
-    // Use MultiSourceRetrievalManager to retrieve from all sources
-    return this.multiSourceManager.retrieveAll({
-      query: args.query,
-      nRetrieve: this.options.nRetrieve,
-      tags: args.tags,
-      filterDirectory: args.filterDirectory,
-    });
+    try {
+      logInfo(LogSource.RETRIEVAL, "Multi-source retrieval started", {
+        query: args.query,
+        nRetrieve: this.options.nRetrieve,
+        filterDirectory: args.filterDirectory,
+      });
+
+      if (!this.multiSourceManager) {
+        // Fallback: If multi-source manager not initialized, return empty result
+        logDebug(
+          LogSource.RETRIEVAL,
+          "Multi-source retrieval skipped: manager not initialized",
+        );
+        console.warn(
+          "MultiSourceRetrievalManager not initialized. Enable by passing multiSourceOptions to constructor.",
+        );
+        return {
+          sources: {
+            fts: [],
+            embeddings: [],
+            recentlyEdited: [],
+            repoMap: [],
+            lspDefinitions: [],
+            importAnalysis: [],
+            recentlyVisitedRanges: [],
+            staticContext: [],
+            toolBasedSearch: [],
+          },
+          metadata: [],
+          totalTimeMs: 0,
+        };
+      }
+
+      // Use MultiSourceRetrievalManager to retrieve from all sources
+      const result = await this.multiSourceManager.retrieveAll({
+        query: args.query,
+        nRetrieve: this.options.nRetrieve,
+        tags: args.tags,
+        filterDirectory: args.filterDirectory,
+      });
+
+      const duration = Date.now() - startTime;
+
+      // Count total chunks from all sources
+      const totalChunks = Object.values(result.sources).reduce(
+        (sum, chunks) => sum + chunks.length,
+        0,
+      );
+
+      logInfo(LogSource.RETRIEVAL, "Multi-source retrieval completed", {
+        query: args.query,
+        totalChunks,
+        sources: Object.entries(result.sources)
+          .filter(([_, chunks]) => chunks.length > 0)
+          .map(([source, chunks]) => `${source}:${chunks.length}`)
+          .join(", "),
+        durationMs: duration,
+        totalTimeMs: result.totalTimeMs,
+      });
+
+      return result;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logError(
+        LogSource.RETRIEVAL,
+        "Multi-source retrieval failed",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          query: args.query,
+          nRetrieve: this.options.nRetrieve,
+          durationMs: duration,
+        },
+      );
+      throw error;
+    }
   }
 
   /**
@@ -284,31 +401,71 @@ export default class BaseRetrievalPipeline
    * @returns Fused and ranked chunks
    */
   async fuseResults(sources: EnhancedRetrievalSources): Promise<Chunk[]> {
-    // Default implementation: Simple concatenation
-    // Subclasses can override for more sophisticated fusion (e.g., reranking)
-    const allChunks: Chunk[] = [
-      ...sources.fts,
-      ...sources.embeddings,
-      ...sources.recentlyEdited,
-      ...sources.repoMap,
-      ...sources.lspDefinitions,
-      ...sources.importAnalysis,
-      ...sources.recentlyVisitedRanges,
-      ...sources.staticContext,
-      ...sources.toolBasedSearch,
-    ];
+    const startTime = Date.now();
 
-    // Remove duplicates based on digest
-    const seen = new Set<string>();
-    const deduplicated = allChunks.filter((chunk) => {
-      if (seen.has(chunk.digest)) {
-        return false;
-      }
-      seen.add(chunk.digest);
-      return true;
-    });
+    try {
+      logDebug(LogSource.RETRIEVAL, "Fusing results from multiple sources", {
+        sourceCounts: {
+          fts: sources.fts.length,
+          embeddings: sources.embeddings.length,
+          recentlyEdited: sources.recentlyEdited.length,
+          repoMap: sources.repoMap.length,
+          lspDefinitions: sources.lspDefinitions.length,
+          importAnalysis: sources.importAnalysis.length,
+          recentlyVisitedRanges: sources.recentlyVisitedRanges.length,
+          staticContext: sources.staticContext.length,
+          toolBasedSearch: sources.toolBasedSearch.length,
+        },
+      });
 
-    return deduplicated.slice(0, this.options.nFinal);
+      // Default implementation: Simple concatenation
+      // Subclasses can override for more sophisticated fusion (e.g., reranking)
+      const allChunks: Chunk[] = [
+        ...sources.fts,
+        ...sources.embeddings,
+        ...sources.recentlyEdited,
+        ...sources.repoMap,
+        ...sources.lspDefinitions,
+        ...sources.importAnalysis,
+        ...sources.recentlyVisitedRanges,
+        ...sources.staticContext,
+        ...sources.toolBasedSearch,
+      ];
+
+      // Remove duplicates based on digest
+      const seen = new Set<string>();
+      const deduplicated = allChunks.filter((chunk) => {
+        if (seen.has(chunk.digest)) {
+          return false;
+        }
+        seen.add(chunk.digest);
+        return true;
+      });
+
+      const final = deduplicated.slice(0, this.options.nFinal);
+
+      const duration = Date.now() - startTime;
+      logInfo(LogSource.RETRIEVAL, "Results fusion completed", {
+        totalChunks: allChunks.length,
+        deduplicatedChunks: deduplicated.length,
+        finalChunks: final.length,
+        duplicatesRemoved: allChunks.length - deduplicated.length,
+        durationMs: duration,
+      });
+
+      return final;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logError(
+        LogSource.RETRIEVAL,
+        "Results fusion failed",
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          durationMs: duration,
+        },
+      );
+      throw error;
+    }
   }
 
   /**
