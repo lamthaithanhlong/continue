@@ -1,6 +1,6 @@
 /**
  * Multi-Source Retrieval Manager
- * 
+ *
  * Coordinates parallel retrieval from multiple context sources:
  * - FTS (Full-Text Search)
  * - Embeddings (Vector Search)
@@ -11,18 +11,27 @@
  * - Recently Visited Ranges (NEW)
  * - Static Context (NEW)
  * - Tool-Based Search (NEW)
- * 
+ *
  * Phase 1.2 of Context Engine Enhancement
  * @see CONTEXT_ENGINE_IMPROVEMENT_ROADMAP.md
  */
 
 import { openedFilesLruCache } from "../../autocomplete/util/openedFilesLruCache.js";
-import { BranchAndDir, Chunk, ContinueConfig, IDE, ILLM } from "../../index.d.js";
+import {
+  BranchAndDir,
+  Chunk,
+  ContinueConfig,
+  IDE,
+  ILLM,
+} from "../../index.d.js";
 import { chunkDocument } from "../../indexing/chunk/chunk.js";
 import { FullTextSearchCodebaseIndex } from "../../indexing/FullTextSearchCodebaseIndex.js";
 import { LanceDbIndex } from "../../indexing/LanceDbIndex.js";
 import { Telemetry } from "../../util/posthog.js";
 import { requestFilesFromRepoMap } from "./repoMapRequest.js";
+import RetrievalLogger, {
+  type RetrievalLoggerConfig,
+} from "./RetrievalLogger.js";
 import { getCleanedTrigrams } from "./util.js";
 
 import {
@@ -46,6 +55,7 @@ export interface MultiSourceRetrievalManagerOptions {
   ide: IDE;
   ftsIndex?: FullTextSearchCodebaseIndex;
   lanceDbIndex?: LanceDbIndex | null;
+  loggerConfig?: RetrievalLoggerConfig;
 }
 
 /**
@@ -61,26 +71,40 @@ export interface RetrievalArguments {
 
 /**
  * MultiSourceRetrievalManager
- * 
+ *
  * Manages parallel retrieval from all enabled context sources.
  * Handles errors gracefully and tracks performance metrics.
  */
 export class MultiSourceRetrievalManager {
   private ftsIndex: FullTextSearchCodebaseIndex;
   private lanceDbIndex: LanceDbIndex | null = null;
+  private logger: RetrievalLogger;
 
   constructor(private readonly options: MultiSourceRetrievalManagerOptions) {
     this.ftsIndex = options.ftsIndex || new FullTextSearchCodebaseIndex();
     this.lanceDbIndex = options.lanceDbIndex || null;
+    this.logger = RetrievalLogger.getInstance(options.loggerConfig);
   }
 
   /**
    * Retrieve from all enabled sources in parallel
    */
-  async retrieveAll(args: RetrievalArguments): Promise<EnhancedRetrievalResult> {
+  async retrieveAll(
+    args: RetrievalArguments,
+  ): Promise<EnhancedRetrievalResult> {
     const startTime = Date.now();
     const sourceConfig = args.sourceConfig || DEFAULT_SOURCE_CONFIG;
     const enabled = getEnabledSources(sourceConfig);
+
+    // Log retrieval start
+    const enabledSourceNames = Object.entries(enabled)
+      .filter(([_, isEnabled]) => isEnabled)
+      .map(([name, _]) => name);
+    const retrievalId = this.logger.logRetrievalStart(
+      args.query,
+      args.nRetrieve,
+      enabledSourceNames,
+    );
 
     const sources = createEmptyRetrievalSources();
     const metadata: RetrievalSourceMetadata[] = [];
@@ -96,6 +120,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveFts(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -108,6 +133,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveEmbeddings(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -120,6 +146,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveRecentlyEdited(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -132,6 +159,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveRepoMap(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -144,6 +172,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveLspDefinitions(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -156,6 +185,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveImportAnalysis(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -168,6 +198,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveRecentlyVisitedRanges(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -180,6 +211,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveStaticContext(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -192,6 +224,7 @@ export class MultiSourceRetrievalManager {
           () => this.retrieveToolBased(args),
           sources,
           metadata,
+          retrievalId,
         ),
       );
     }
@@ -200,6 +233,15 @@ export class MultiSourceRetrievalManager {
     await Promise.all(retrievalPromises);
 
     const totalTimeMs = Date.now() - startTime;
+
+    // Count total chunks
+    const totalChunks = Object.values(sources).reduce(
+      (sum, chunks) => sum + chunks.length,
+      0,
+    );
+
+    // Log retrieval completion
+    this.logger.logRetrievalComplete(retrievalId, totalChunks);
 
     return {
       sources,
@@ -216,13 +258,29 @@ export class MultiSourceRetrievalManager {
     retrieveFn: () => Promise<Chunk[]>,
     sources: EnhancedRetrievalSources,
     metadata: RetrievalSourceMetadata[],
+    retrievalId?: string,
   ): Promise<void> {
     const startTime = Date.now();
-    
+
+    // Log source start
+    if (retrievalId) {
+      this.logger.logSourceStart(retrievalId, sourceName);
+    }
+
     try {
       const chunks = await retrieveFn();
       sources[sourceName] = chunks;
-      
+
+      // Log source completion
+      if (retrievalId) {
+        this.logger.logSourceComplete(
+          retrievalId,
+          sourceName,
+          chunks.length,
+          startTime,
+        );
+      }
+
       metadata.push({
         source: sourceName,
         count: chunks.length,
@@ -230,10 +288,18 @@ export class MultiSourceRetrievalManager {
         success: true,
       });
     } catch (error) {
+      // Log error
+      if (retrievalId && error instanceof Error) {
+        this.logger.logSourceError(retrievalId, sourceName, error, startTime);
+      }
+
       // Log error but don't fail the entire retrieval
       console.error(`Error retrieving from ${sourceName}:`, error);
-      await Telemetry.captureError(`multi_source_${sourceName}_retrieval`, error);
-      
+      await Telemetry.captureError(
+        `multi_source_${sourceName}_retrieval`,
+        error,
+      );
+
       sources[sourceName] = [];
       metadata.push({
         source: sourceName,
@@ -288,7 +354,9 @@ export class MultiSourceRetrievalManager {
   /**
    * Retrieve from Recently Edited Files
    */
-  private async retrieveRecentlyEdited(args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveRecentlyEdited(
+    args: RetrievalArguments,
+  ): Promise<Chunk[]> {
     const recentlyEditedFilesSlice = Array.from(
       openedFilesLruCache.keys(),
     ).slice(0, args.nRetrieve);
@@ -309,8 +377,8 @@ export class MultiSourceRetrievalManager {
         filepath,
         contents,
         maxChunkSize:
-          this.options.config.selectedModelByRole.embed?.maxEmbeddingChunkSize ??
-          DEFAULT_CHUNK_SIZE,
+          this.options.config.selectedModelByRole.embed
+            ?.maxEmbeddingChunkSize ?? DEFAULT_CHUNK_SIZE,
         digest: filepath,
       });
 
@@ -341,7 +409,9 @@ export class MultiSourceRetrievalManager {
    * Retrieve from LSP Definitions
    * TODO: Implement in Phase 2.1
    */
-  private async retrieveLspDefinitions(_args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveLspDefinitions(
+    _args: RetrievalArguments,
+  ): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.1
     return [];
   }
@@ -350,7 +420,9 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Import Analysis
    * TODO: Implement in Phase 2.2
    */
-  private async retrieveImportAnalysis(_args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveImportAnalysis(
+    _args: RetrievalArguments,
+  ): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.2
     return [];
   }
@@ -359,7 +431,9 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Recently Visited Ranges
    * TODO: Implement in Phase 2.3
    */
-  private async retrieveRecentlyVisitedRanges(_args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveRecentlyVisitedRanges(
+    _args: RetrievalArguments,
+  ): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.3
     return [];
   }
@@ -368,7 +442,9 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Static Context
    * TODO: Implement in Phase 2.4
    */
-  private async retrieveStaticContext(_args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveStaticContext(
+    _args: RetrievalArguments,
+  ): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.4
     return [];
   }
@@ -381,6 +457,4 @@ export class MultiSourceRetrievalManager {
     // Placeholder - will be implemented in Phase 2.5
     return [];
   }
-
 }
-
