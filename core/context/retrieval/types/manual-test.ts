@@ -301,7 +301,9 @@ console.log(`❌ Failed: ${testsFailed}`);
 console.log(`📈 Total:  ${testsPassed + testsFailed}`);
 
 if (testsFailed === 0) {
-  console.log("\n🎉 All tests passed! Phase 1.1 is working correctly! ✅\n");
+  console.log("\n🎉 All tests passed! Phase 1.1 is working correctly! ✅");
+  console.log("\n💡 To test Phase 1.2, run:");
+  console.log("   npx tsx context/retrieval/manual-test-phase-1-2.ts\n");
   process.exit(0);
 } else {
   console.log(`\n⚠️  ${testsFailed} test(s) failed. Please review.\n`);
