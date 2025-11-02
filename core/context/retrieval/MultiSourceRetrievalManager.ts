@@ -32,6 +32,7 @@ import { requestFilesFromRepoMap } from "./repoMapRequest.js";
 import RetrievalLogger, {
   type RetrievalLoggerConfig,
 } from "./RetrievalLogger.js";
+import { LspDefinitionsRetriever } from "./sources/LspDefinitionsRetriever.js";
 import { getCleanedTrigrams } from "./util.js";
 
 import {
@@ -78,11 +79,13 @@ export interface RetrievalArguments {
 export class MultiSourceRetrievalManager {
   private ftsIndex: FullTextSearchCodebaseIndex;
   private lanceDbIndex: LanceDbIndex | null = null;
+  private lspRetriever: LspDefinitionsRetriever;
   private logger: RetrievalLogger;
 
   constructor(private readonly options: MultiSourceRetrievalManagerOptions) {
     this.ftsIndex = options.ftsIndex || new FullTextSearchCodebaseIndex();
     this.lanceDbIndex = options.lanceDbIndex || null;
+    this.lspRetriever = new LspDefinitionsRetriever(options.ide);
     this.logger = RetrievalLogger.getInstance(options.loggerConfig);
   }
 
@@ -407,13 +410,21 @@ export class MultiSourceRetrievalManager {
 
   /**
    * Retrieve from LSP Definitions
-   * TODO: Implement in Phase 2.1
+   * Uses IDE's Language Server Protocol to find symbol definitions
    */
   private async retrieveLspDefinitions(
-    _args: RetrievalArguments,
+    args: RetrievalArguments,
   ): Promise<Chunk[]> {
-    // Placeholder - will be implemented in Phase 2.1
-    return [];
+    // Get current file if available
+    const currentFile = await this.options.ide.getCurrentFile();
+    const currentFilePath = currentFile?.path;
+
+    // Retrieve using LSP
+    return await this.lspRetriever.retrieve(
+      args.query,
+      args.nRetrieve,
+      currentFilePath,
+    );
   }
 
   /**

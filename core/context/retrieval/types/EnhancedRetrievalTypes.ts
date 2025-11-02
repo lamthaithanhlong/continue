@@ -50,49 +50,49 @@ export const DEFAULT_SOURCE_CONFIG: RetrievalSourceConfig = {
   enableRecentlyEdited: true,
   enableRepoMap: true,
 
-  // Phase 2 sources (placeholders - will be implemented in Phase 2)
-  enableLspDefinitions: false,
-  enableImportAnalysis: false,
-  enableRecentlyVisitedRanges: false,
-  enableStaticContext: false,
-  enableToolBasedSearch: false,
+  // Phase 2 sources
+  enableLspDefinitions: true, // ✅ Phase 2.1 - Implemented
+  enableImportAnalysis: false, // TODO: Phase 2.2
+  enableRecentlyVisitedRanges: false, // TODO: Phase 2.3
+  enableStaticContext: false, // TODO: Phase 2.4
+  enableToolBasedSearch: false, // TODO: Phase 2.5
 };
 
 /**
  * Results from multiple retrieval sources
- * 
+ *
  * This interface aggregates chunks from all available context sources.
  * Each source is optional to allow for graceful degradation if a source fails.
  */
 export interface EnhancedRetrievalSources {
   // ===== EXISTING SOURCES =====
-  
+
   /** Chunks from Full-Text Search (trigram-based) */
   fts: Chunk[];
-  
+
   /** Chunks from Vector Embeddings (LanceDB) */
   embeddings: Chunk[];
-  
+
   /** Chunks from Recently Edited Files (LRU cache) */
   recentlyEdited: Chunk[];
-  
+
   /** Chunks from Repository Map (LLM-generated structure) */
   repoMap: Chunk[];
-  
+
   // ===== NEW SOURCES =====
-  
+
   /** Chunks from LSP Definitions (IDE language server) */
   lspDefinitions: Chunk[];
-  
+
   /** Chunks from Import Analysis (dependency graph) */
   importAnalysis: Chunk[];
-  
+
   /** Chunks from Recently Visited Ranges (user navigation patterns) */
   recentlyVisitedRanges: Chunk[];
-  
+
   /** Chunks from Static Context Analysis (pattern matching) */
   staticContext: Chunk[];
-  
+
   /** Chunks from Tool-Based Search (intelligent tool calling) */
   toolBasedSearch: Chunk[];
 }
@@ -150,9 +150,9 @@ export const DEFAULT_FUSION_OPTIONS: FusionOptions = {
     fts: 0.15,
     embeddings: 0.25,
     recentlyEdited: 0.15,
-    repoMap: 0.10,
+    repoMap: 0.1,
     lspDefinitions: 0.15,
-    importAnalysis: 0.10,
+    importAnalysis: 0.1,
     recentlyVisitedRanges: 0.05,
     staticContext: 0.03,
     toolBasedSearch: 0.02,
@@ -182,7 +182,7 @@ export interface EnhancedRetrievalPipelineRunArguments {
 
 /**
  * Enhanced Retrieval Pipeline Interface
- * 
+ *
  * Extends the basic IRetrievalPipeline with multi-source capabilities.
  * Maintains backward compatibility while adding new functionality.
  */
@@ -201,10 +201,10 @@ export interface IEnhancedRetrievalPipeline {
 
   /**
    * Retrieve chunks from multiple sources in parallel
-   * 
+   *
    * This method coordinates retrieval from all enabled sources and returns
    * the raw results without fusion. Useful for debugging or custom fusion logic.
-   * 
+   *
    * @param args Enhanced retrieval arguments
    * @returns Results from all sources with metadata
    */
@@ -214,13 +214,13 @@ export interface IEnhancedRetrievalPipeline {
 
   /**
    * Fuse results from multiple sources into a single ranked list
-   * 
+   *
    * This method takes raw results from multiple sources and:
    * 1. Deduplicates chunks (semantic or exact)
    * 2. Analyzes cross-references between chunks
    * 3. Ranks chunks based on composite scoring
    * 4. Returns top N chunks
-   * 
+   *
    * @param sources Raw retrieval results from all sources
    * @param options Fusion options (weights, dedup, etc.)
    * @returns Fused and ranked chunks
@@ -232,10 +232,10 @@ export interface IEnhancedRetrievalPipeline {
 
   /**
    * Run the enhanced pipeline end-to-end
-   * 
+   *
    * Convenience method that combines retrieveFromMultipleSources and fuseResults.
    * This is the recommended way to use the enhanced pipeline.
-   * 
+   *
    * @param args Enhanced retrieval arguments
    * @returns Fused and ranked chunks
    */
@@ -318,4 +318,3 @@ export function mergeAllChunks(sources: EnhancedRetrievalSources): Chunk[] {
     ...sources.toolBasedSearch,
   ];
 }
-
