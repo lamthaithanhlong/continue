@@ -105,7 +105,7 @@ export class DependencyGraphBuilder {
       node.metadata!.importCount = importedFiles.size;
 
       // Update reverse edges (importedBy)
-      for (const importedFile of importedFiles) {
+      Array.from(importedFiles).forEach((importedFile) => {
         // Ensure imported file has a node
         if (!this.graph.nodes.has(importedFile)) {
           const importedNode: DependencyNode = {
@@ -125,7 +125,7 @@ export class DependencyGraphBuilder {
         const importedNode = this.graph.nodes.get(importedFile)!;
         importedNode.importedBy.add(filepath);
         importedNode.metadata!.importedByCount = importedNode.importedBy.size;
-      }
+      });
     }
 
     // Add node to graph
@@ -203,9 +203,9 @@ export class DependencyGraphBuilder {
 
     // Flatten results
     const allFiles: string[] = [];
-    for (const files of filesByDepth.values()) {
-      allFiles.push(...Array.from(files));
-    }
+    Array.from(filesByDepth.values()).forEach((files) => {
+      Array.from(files).forEach((file) => allFiles.push(file));
+    });
 
     return {
       sourceFile: targetFile,
@@ -245,7 +245,7 @@ export class DependencyGraphBuilder {
         continue;
       }
 
-      for (const neighbor of node.imports) {
+      Array.from(node.imports).forEach((neighbor) => {
         if (!visited.has(neighbor)) {
           visited.add(neighbor);
           queue.push({
@@ -253,7 +253,7 @@ export class DependencyGraphBuilder {
             path: [...path, neighbor],
           });
         }
-      }
+      });
     }
 
     // No path found
@@ -275,7 +275,7 @@ export class DependencyGraphBuilder {
 
       const node = this.graph.nodes.get(file);
       if (node) {
-        for (const neighbor of node.imports) {
+        Array.from(node.imports).forEach((neighbor) => {
           if (!visited.has(neighbor)) {
             dfs(neighbor, [...path]);
           } else if (recursionStack.has(neighbor)) {
@@ -284,18 +284,18 @@ export class DependencyGraphBuilder {
             const cycle = path.slice(cycleStart);
             cycles.push([...cycle, neighbor]);
           }
-        }
+        });
       }
 
       recursionStack.delete(file);
     };
 
     // Run DFS from each unvisited node
-    for (const file of this.graph.nodes.keys()) {
+    Array.from(this.graph.nodes.keys()).forEach((file) => {
       if (!visited.has(file)) {
         dfs(file, []);
       }
-    }
+    });
 
     return cycles;
   }
