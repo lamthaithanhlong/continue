@@ -261,6 +261,13 @@
         "group": "Continue"
       },
       {
+        "command": "continue.exportLogs",
+        "category": "Continue",
+        "title": "Export Logs for Debugging",
+        "icon": "$(export)",
+        "group": "Continue"
+      },
+      {
         "command": "continue.clearConsole",
         "category": "Continue",
         "title": "Clear Console",

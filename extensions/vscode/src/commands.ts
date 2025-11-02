@@ -397,6 +397,77 @@ const getCommandsMap: (
       captureCommandTelemetry("viewLogs");
       vscode.commands.executeCommand("workbench.action.toggleDevTools");
     },
+    "continue.exportLogs": async () => {
+      captureCommandTelemetry("exportLogs");
+
+      try {
+        // Show progress notification
+        await vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Exporting logs...",
+            cancellable: false,
+          },
+          async (progress) => {
+            progress.report({ increment: 0 });
+
+            // Dynamic import of log export functionality
+            const { exportLogs } = await import(
+              "../../../core/context/retrieval/LogCollector.js"
+            );
+
+            progress.report({ increment: 50, message: "Collecting logs..." });
+
+            // Export logs as JSON
+            const result = await exportLogs({
+              format: "json" as any,
+              includeSystemInfo: true,
+              sanitize: true,
+            });
+
+            progress.report({ increment: 100, message: "Export complete!" });
+
+            if (result.success && result.filePath) {
+              // Show success notification with actions
+              const action = await vscode.window.showInformationMessage(
+                `Logs exported successfully! (${result.entriesCount} entries, ${Math.round((result.fileSize || 0) / 1024)} KB)`,
+                "Open File",
+                "Copy Path",
+                "Show in Folder",
+              );
+
+              if (action === "Open File") {
+                // Open the exported file
+                const doc = await vscode.workspace.openTextDocument(
+                  result.filePath,
+                );
+                await vscode.window.showTextDocument(doc);
+              } else if (action === "Copy Path") {
+                // Copy file path to clipboard
+                await vscode.env.clipboard.writeText(result.filePath);
+                vscode.window.showInformationMessage(
+                  "File path copied to clipboard!",
+                );
+              } else if (action === "Show in Folder") {
+                // Reveal file in file explorer
+                vscode.commands.executeCommand(
+                  "revealFileInOS",
+                  vscode.Uri.file(result.filePath),
+                );
+              }
+            } else {
+              vscode.window.showErrorMessage(
+                `Failed to export logs: ${result.error || "Unknown error"}`,
+              );
+            }
+          },
+        );
+      } catch (error) {
+        vscode.window.showErrorMessage(
+          `Failed to export logs: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
     "continue.debugTerminal": async () => {
       captureCommandTelemetry("debugTerminal");
 
