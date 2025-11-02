@@ -8,8 +8,7 @@
  * @see CONTEXT_ENGINE_IMPROVEMENT_ROADMAP.md
  */
 
-import { Chunk, IDE, ILLM, ContinueConfig } from "../../../index.d.js";
-import { BranchAndDir } from "../../../index.d.js";
+import { BranchAndDir, Chunk } from "../../../index.d.js";
 
 /**
  * Configuration for individual retrieval sources
@@ -36,18 +35,24 @@ export interface RetrievalSourceConfig {
 }
 
 /**
- * Default configuration - all sources enabled
+ * Default configuration
+ *
+ * Phase 1 sources (implemented): enabled by default
+ * Phase 2 sources (placeholders): disabled by default
  */
 export const DEFAULT_SOURCE_CONFIG: RetrievalSourceConfig = {
+  // Phase 1 sources (implemented)
   enableFts: true,
   enableEmbeddings: true,
   enableRecentlyEdited: true,
   enableRepoMap: true,
-  enableLspDefinitions: true,
-  enableImportAnalysis: true,
-  enableRecentlyVisitedRanges: true,
-  enableStaticContext: true,
-  enableToolBasedSearch: true,
+
+  // Phase 2 sources (placeholders - will be implemented in Phase 2)
+  enableLspDefinitions: false,
+  enableImportAnalysis: false,
+  enableRecentlyVisitedRanges: false,
+  enableStaticContext: false,
+  enableToolBasedSearch: false,
 };
 
 /**
