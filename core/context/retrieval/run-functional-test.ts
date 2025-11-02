@@ -5,8 +5,8 @@
  * Run: cd core && npx tsx context/retrieval/run-functional-test.ts
  */
 
+import type { ContinueConfig, IDE, ILLM } from "../../index.d.js";
 import { MultiSourceRetrievalManager } from "./MultiSourceRetrievalManager.js";
-import type { Chunk, IDE, ILLM, ContinueConfig } from "../../index.d.js";
 
 // Test utilities
 let testsPassed = 0;
@@ -65,7 +65,6 @@ const mockIDE: IDE = {
   getWorkspaceConfigs: async () => [],
   showDiff: async () => {},
   visibleFiles: [],
-  getOpenFiles: async () => [],
 } as any;
 
 const mockLLM: ILLM = {
