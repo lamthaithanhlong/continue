@@ -23,15 +23,16 @@ import { FullTextSearchCodebaseIndex } from "../../indexing/FullTextSearchCodeba
 import { LanceDbIndex } from "../../indexing/LanceDbIndex.js";
 import { Telemetry } from "../../util/posthog.js";
 import { requestFilesFromRepoMap } from "./repoMapRequest.js";
+import { getCleanedTrigrams } from "./util.js";
 
 import {
-    DEFAULT_SOURCE_CONFIG,
-    EnhancedRetrievalResult,
-    EnhancedRetrievalSources,
-    RetrievalSourceConfig,
-    RetrievalSourceMetadata,
-    createEmptyRetrievalSources,
-    getEnabledSources,
+  DEFAULT_SOURCE_CONFIG,
+  EnhancedRetrievalResult,
+  EnhancedRetrievalSources,
+  RetrievalSourceConfig,
+  RetrievalSourceMetadata,
+  createEmptyRetrievalSources,
+  getEnabledSources,
 } from "./types/EnhancedRetrievalTypes.js";
 
 const DEFAULT_CHUNK_SIZE = 384;
@@ -340,7 +341,7 @@ export class MultiSourceRetrievalManager {
    * Retrieve from LSP Definitions
    * TODO: Implement in Phase 2.1
    */
-  private async retrieveLspDefinitions(args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveLspDefinitions(_args: RetrievalArguments): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.1
     return [];
   }
@@ -349,7 +350,7 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Import Analysis
    * TODO: Implement in Phase 2.2
    */
-  private async retrieveImportAnalysis(args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveImportAnalysis(_args: RetrievalArguments): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.2
     return [];
   }
@@ -358,7 +359,7 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Recently Visited Ranges
    * TODO: Implement in Phase 2.3
    */
-  private async retrieveRecentlyVisitedRanges(args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveRecentlyVisitedRanges(_args: RetrievalArguments): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.3
     return [];
   }
@@ -367,7 +368,7 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Static Context
    * TODO: Implement in Phase 2.4
    */
-  private async retrieveStaticContext(args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveStaticContext(_args: RetrievalArguments): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.4
     return [];
   }
@@ -376,7 +377,7 @@ export class MultiSourceRetrievalManager {
    * Retrieve from Tool-Based Search
    * TODO: Implement in Phase 2.5
    */
-  private async retrieveToolBased(args: RetrievalArguments): Promise<Chunk[]> {
+  private async retrieveToolBased(_args: RetrievalArguments): Promise<Chunk[]> {
     // Placeholder - will be implemented in Phase 2.5
     return [];
   }

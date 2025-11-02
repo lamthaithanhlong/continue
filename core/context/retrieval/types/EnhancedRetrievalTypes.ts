@@ -1,14 +1,17 @@
 /**
  * Enhanced Retrieval Types for Multi-Source Context Engine
- * 
+ *
  * This file defines the enhanced retrieval pipeline interfaces that support
  * multiple context sources beyond the basic FTS, embeddings, and recently edited files.
- * 
+ *
  * Phase 1.1 of Context Engine Enhancement
  * @see CONTEXT_ENGINE_IMPROVEMENT_ROADMAP.md
  */
 
 import { BranchAndDir, Chunk } from "../../../index.d.js";
+
+// Re-export types for convenience
+export type { BranchAndDir, Chunk };
 
 /**
  * Configuration for individual retrieval sources
