@@ -134,8 +134,8 @@ console.log("=== Testing Method Implementations ===\n");
 test("retrieveFromMultipleSources checks for multiSourceManager", () =>
   /if \(!this\.multiSourceManager\)/.test(content));
 
-test("retrieveFromMultipleSources returns EnhancedRetrievalSources", () =>
-  /Promise<EnhancedRetrievalSources>/.test(content));
+test("retrieveFromMultipleSources returns EnhancedRetrievalResult", () =>
+  /Promise<EnhancedRetrievalResult>/.test(content));
 
 test("fuseResults deduplicates chunks", () =>
   /seen\.has\(chunk\.digest\)/.test(content));

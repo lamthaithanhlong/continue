@@ -29,6 +29,7 @@ import {
   MultiSourceRetrievalManagerOptions,
 } from "../MultiSourceRetrievalManager";
 import {
+  EnhancedRetrievalResult,
   EnhancedRetrievalSources,
   IEnhancedRetrievalPipeline,
 } from "../types/EnhancedRetrievalTypes";
@@ -84,12 +85,14 @@ export default class BaseRetrievalPipeline
 
     // Phase 1.4: Initialize enhanced retrieval components if configured
     if (options.multiSourceOptions) {
-      this.multiSourceManager = new MultiSourceRetrievalManager(
-        options.llm,
-        options.config,
-        options.ide,
-        options.multiSourceOptions,
-      );
+      this.multiSourceManager = new MultiSourceRetrievalManager({
+        llm: options.llm,
+        config: options.config,
+        ide: options.ide,
+        ftsIndex: this.ftsIndex,
+        lanceDbIndex: this.lanceDbIndex,
+        ...options.multiSourceOptions,
+      });
       this.dependencyGraphBuilder = new DependencyGraphBuilder(options.ide);
     }
   }
@@ -237,32 +240,30 @@ export default class BaseRetrievalPipeline
    * This is the new enhanced retrieval method that coordinates all sources
    *
    * @param args - Retrieval arguments
-   * @returns EnhancedRetrievalSources with results from all enabled sources
+   * @returns EnhancedRetrievalResult with results from all enabled sources and metadata
    */
   async retrieveFromMultipleSources(
     args: RetrievalPipelineRunArguments,
-  ): Promise<EnhancedRetrievalSources> {
+  ): Promise<EnhancedRetrievalResult> {
     if (!this.multiSourceManager) {
-      // Fallback: If multi-source manager not initialized, return empty sources
+      // Fallback: If multi-source manager not initialized, return empty result
       console.warn(
         "MultiSourceRetrievalManager not initialized. Enable by passing multiSourceOptions to constructor.",
       );
       return {
-        fts: [],
-        embeddings: [],
-        lsp: [],
-        treeSitter: [],
-        git: [],
-        docs: [],
-        codebase: [],
-        file: [],
-        folder: [],
-        metadata: {
-          totalSources: 0,
-          totalChunks: 0,
-          timeMs: 0,
-          sources: [],
+        sources: {
+          fts: [],
+          embeddings: [],
+          recentlyEdited: [],
+          repoMap: [],
+          lspDefinitions: [],
+          importAnalysis: [],
+          recentlyVisitedRanges: [],
+          staticContext: [],
+          toolBasedSearch: [],
         },
+        metadata: [],
+        totalTimeMs: 0,
       };
     }
 
@@ -272,7 +273,6 @@ export default class BaseRetrievalPipeline
       nRetrieve: this.options.nRetrieve,
       tags: args.tags,
       filterDirectory: args.filterDirectory,
-      includeEmbeddings: args.includeEmbeddings,
     });
   }
 
@@ -289,13 +289,13 @@ export default class BaseRetrievalPipeline
     const allChunks: Chunk[] = [
       ...sources.fts,
       ...sources.embeddings,
-      ...sources.lsp,
-      ...sources.treeSitter,
-      ...sources.git,
-      ...sources.docs,
-      ...sources.codebase,
-      ...sources.file,
-      ...sources.folder,
+      ...sources.recentlyEdited,
+      ...sources.repoMap,
+      ...sources.lspDefinitions,
+      ...sources.importAnalysis,
+      ...sources.recentlyVisitedRanges,
+      ...sources.staticContext,
+      ...sources.toolBasedSearch,
     ];
 
     // Remove duplicates based on digest
@@ -317,6 +317,18 @@ export default class BaseRetrievalPipeline
    */
   getDependencyGraphBuilder(): DependencyGraphBuilder | undefined {
     return this.dependencyGraphBuilder;
+  }
+
+  /**
+   * Run the enhanced pipeline end-to-end
+   * Convenience method that combines retrieveFromMultipleSources and fuseResults
+   *
+   * @param args - Enhanced retrieval arguments
+   * @returns Fused and ranked chunks
+   */
+  async runEnhanced(args: RetrievalPipelineRunArguments): Promise<Chunk[]> {
+    const result = await this.retrieveFromMultipleSources(args);
+    return this.fuseResults(result.sources);
   }
 
   protected async retrieveWithTools(input: string): Promise<Chunk[]> {
