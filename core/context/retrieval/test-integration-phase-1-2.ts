@@ -5,11 +5,11 @@
  * and can be integrated into the existing retrieval architecture.
  */
 
-import { MultiSourceRetrievalManager, RetrievalArguments } from "./MultiSourceRetrievalManager";
-import { RetrievalPipelineOptions, RetrievalPipelineRunArguments } from "./pipelines/BaseRetrievalPipeline";
+import { Chunk, ContinueConfig, IDE, ILLM } from "../../index.d.js";
 import { FullTextSearchCodebaseIndex } from "../../indexing/FullTextSearchCodebaseIndex";
 import { LanceDbIndex } from "../../indexing/LanceDbIndex";
-import { BranchAndDir, Chunk, ContinueConfig, IDE, ILLM } from "../../index.d.js";
+import { MultiSourceRetrievalManager, RetrievalArguments } from "./MultiSourceRetrievalManager";
+import { RetrievalPipelineOptions, RetrievalPipelineRunArguments } from "./pipelines/BaseRetrievalPipeline";
 
 /**
  * Test 1: Verify MultiSourceRetrievalManager can use same indexes as BaseRetrievalPipeline
@@ -75,8 +75,9 @@ function testArgumentCompatibility() {
  * Test 3: Verify return type compatibility
  */
 async function testReturnTypeCompatibility() {
-  const manager = testIndexCompatibility();
-  const { managerArgs } = testArgumentCompatibility();
+  // Test compatibility without using the values
+  testIndexCompatibility();
+  testArgumentCompatibility();
 
   // MultiSourceRetrievalManager returns EnhancedRetrievalResult
   // which contains sources: EnhancedRetrievalSources
@@ -219,13 +220,7 @@ function testConfigurationCompatibility() {
   // BaseRetrievalPipeline uses RetrievalPipelineOptions:
   const baseOptions: RetrievalPipelineOptions = {
     llm: {} as ILLM,
-    config: {
-      selectedModelByRole: {
-        embed: {
-          maxEmbeddingChunkSize: 512,
-        } as any,
-      },
-    } as ContinueConfig,
+    config: {} as ContinueConfig,
     ide: {} as IDE,
     input: "test query",
     nRetrieve: 30,
@@ -236,12 +231,9 @@ function testConfigurationCompatibility() {
 
   // MultiSourceRetrievalManager uses MultiSourceRetrievalManagerOptions:
   // Can be constructed from baseOptions ✅
-  const managerOptions = {
-    llm: baseOptions.llm,
-    config: baseOptions.config,
-    ide: baseOptions.ide,
-    // Optional: ftsIndex, lanceDbIndex
-  };
+  console.log("  baseOptions.llm:", typeof baseOptions.llm);
+  console.log("  baseOptions.config:", typeof baseOptions.config);
+  console.log("  baseOptions.ide:", typeof baseOptions.ide);
 
   console.log("✅ Test 7: Configuration compatibility - PASS");
 }
